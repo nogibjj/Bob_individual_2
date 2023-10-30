@@ -1,22 +1,39 @@
-install:
-	pip install --upgrade pip &&\
-		pip install -r requirements.txt
+# Display Rust command-line utility versions
+rust-version:
+	@echo "Rust command-line utility versions:"
+	rustc --version              # Rust compiler
+	cargo --version              # Rust package manager
+	rustfmt --version            # Rust code formatter
+	rustup --version             # Rust toolchain manager
+	clippy-driver --version      # Rust linter
 
-test:
-	python -m pytest -vv --cov=main --cov=mylib test_*.py
+# Format code using rustfmt
+format:
+	cargo fmt --quiet
 
-format:	
-	black *.py 
-
+# Run clippy for linting
 lint:
-	pylint --disable=R,C --ignore-patterns=test_.*?py *.py
+	cargo clippy --quiet
 
-container-lint:
-	docker run --rm -i hadolint/hadolint < Dockerfile
+# Run tests
+test:
+	cargo test --quiet
 
-refactor: format lint
+# Build and run the project
+run:
+	cargo run
 
-deploy:
-	#deploy goes here
-		
-all: install lint test format deploy
+# Build release version
+release:
+	cargo build --release
+
+# Install Rust toolchain if needed
+install:
+	# Install if needed
+	# @echo "Updating rust toolchain"
+	# rustup update stable
+	# rustup default stable 
+
+# Run all formatting, linting, and testing tasks
+all: format lint test run
+
