@@ -1,34 +1,123 @@
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
+// lib.rs
+use rusqlite::{params, Connection, Result};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let url = "https://raw.githubusercontent.com/MainakRepositor/Datasets/master/Chennai%20rain/chennai_reservoir_rainfall.csv";
-    let filepath = "rainfall.csv";
-    extract(url, filepath).await?;
+#[derive(Debug)]
+struct Customer {
+    cust_id: String,
+    name: String,
+    sex: String,
+}
+
+pub fn create(conn: &Connection) -> Result<()> {
+    
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS Customer (
+            cust_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            sex TEXT NOT NULL
+        )",
+        [],
+    )?;
+    
     Ok(())
 }
 
-async fn extract(url: &str, filepath: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Download the data from the URL
-    let response = reqwest::get(url).await?;
+pub fn insert(conn: &Connection) -> Result<()> {
+    conn.execute( "INSERT INTO Customer (cust_id, name, sex)
+              VALUES (?1, ?2, ?3)", params!["001", "John", "Male"])?;
+    conn.execute( "INSERT INTO Customer (cust_id, name, sex)
+              VALUES (?1, ?2, ?3)", params!["002", "Devin", "Female"])?;              
+    conn.execute( "INSERT INTO Customer (cust_id, name, sex)
+              VALUES (?1, ?2, ?3)", params!["003", "Sharon", "Female"])?;                  
+    Ok(())                        
+            
+}
 
-    // Check if the request was successful
-    if response.status().is_success() {
-        // Get the bytes of the response
-        let bytes = response.bytes().await?;
+pub fn query(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT * FROM Customer")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<usize, String>(0)?,
+            row.get::<usize, String>(1)?,
+            row.get::<usize, String>(2)?
+        ))
+    })?;
+    for row in rows {
+        println!("{:?}", row?);
+    }
+    Ok(())
+}
 
-        // Open a file at the specified path for writing
-        let mut file = File::create(Path::new(filepath))?;
+pub fn update(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "UPDATE Customer SET sex = 'Unknown' WHERE cust_id = '001'",
+        [],
+    )?;
+    Ok(())
+}
 
-        // Write the downloaded bytes to the file
-        file.write_all(&bytes)?;
+pub fn delete(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "DELETE FROM Customer WHERE cust_id = '001' ",
+        [],
+    )?;
+    Ok(())
+}
 
-        println!("Data downloaded and saved to {}", filepath);
-    } else {
-        println!("Failed to download data.");
+pub fn drop(conn: &Connection) -> Result<()> {
+    conn.execute("DROP TABLE IF EXISTS Customer", [])?;
+    Ok(())
+}
+
+mod tests {
+    use super::*;
+    use rusqlite::Result;
+
+    #[test]
+    fn test_create() -> Result<()> {
+        let conn = Connection::open_in_memory()?;
+        create(&conn)?;
+        let table_names: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<String>>>()?;
+        assert_eq!(table_names, vec!["Customer"]);
+        Ok(())
     }
 
-    Ok(())
+    #[test]
+    fn test_insert() -> Result<()> {
+        let conn = Connection::open_in_memory()?;
+        create(&conn)?;
+        insert(&conn)?;
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM Customer", [], |row| row.get(0))?;
+        assert_eq!(count, 3);
+        Ok(())       
+    }
+
+    #[test]
+    fn test_update() -> Result<()> {
+        let conn = Connection::open_in_memory()?;
+        create(&conn)?;
+        insert(&conn)?;
+        update(&conn)?;
+        let val: String = conn.query_row("SELECT sex FROM Customer WHERE cust_id = '001'", [], |row| row.get(0))?;
+        assert_eq!(val, "Unknown");
+        Ok(())
+    }
+    #[test]
+    fn test_delete() -> Result<()> {
+        let conn = Connection::open_in_memory()?;
+        create(&conn)?;
+        insert(&conn)?;
+        update(&conn)?;
+        delete(&conn)?;
+        let id: String = conn.query_row("SELECT cust_id FROM Customer LIMIT 1", [], |row| row.get(0))?;
+        assert_eq!(id, "002");
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM Customer", [], |row| row.get(0))?;
+        assert_eq!(count, 2);        
+        Ok(())
+    }
+
+
 }
